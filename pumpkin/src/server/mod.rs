@@ -116,29 +116,27 @@ impl Server {
 
         let block_registry = super::block::default_registry();
 
-        let level_info = AnvilLevelInfo.read_world_info(&world_path);
-        if let Err(error) = &level_info {
-            match error {
-                // If it doesn't exist, just make a new one
-                WorldInfoError::InfoNotFound => (),
+        let level_info = match AnvilLevelInfo.read_world_info(&world_path) {
+            Err(e) => match e {
+                WorldInfoError::InfoNotFound => LevelData::default(),
                 WorldInfoError::UnsupportedVersion(version) => {
                     log::error!("Failed to load world info!, {version}");
-                    log::error!("{error}");
+                    log::error!("{e}");
                     panic!("Unsupported world data! See the logs for more info.");
+                },
+                _ => panic!("World Error {e}"),
+            },
+            Ok(level_info) => {
+                let dat_path = world_path.join(LEVEL_DAT_FILE_NAME);
+                if dat_path.exists() {
+                    let backup_path = world_path.join(LEVEL_DAT_BACKUP_FILE_NAME);
+                    fs::copy(dat_path, backup_path).unwrap();
                 }
-                e => {
-                    panic!("World Error {e}");
-                }
+                level_info
             }
-        } else {
-            let dat_path = world_path.join(LEVEL_DAT_FILE_NAME);
-            if dat_path.exists() {
-                let backup_path = world_path.join(LEVEL_DAT_BACKUP_FILE_NAME);
-                fs::copy(dat_path, backup_path).unwrap();
-            }
-        }
+        };
 
-        let level_info = Arc::new(level_info.unwrap_or_default()); // TODO: Improve error handling
+        let level_info = Arc::new(level_info);
         let seed = level_info.world_gen_settings.seed;
         log::info!("Loading Overworld: {seed}");
         let overworld = World::load(
